@@ -7,7 +7,8 @@ rule download_old_metadata:
         --bucket nextstrain-data \
         --key files/ncov/open/metadata.tsv.zst \
         --version-id AnF_xO4iudTVdiocg0yCFmP6nyvwiVLt \
-        {output}
+        2> /dev/null \
+        {output} \
         """
 
 
@@ -42,4 +43,76 @@ rule non_first_accessions:
         """
         tsv-filter -H --str-in-fld genbank_accession_rev:"." --str-not-in-fld genbank_accession_rev:".1" {input} \
         > {output}
+        """
+
+
+rule join_old_to_new_non_first:
+    """
+    Join old accession numbers to new accession numbers for non-first accessions
+    """
+    input:
+        old_accessions="results/accession_cols_old.tsv",
+        new_non_first="results/non_first_accessions_new.tsv",
+    output:
+        "results/non_first_accessions.tsv",
+    shell:
+        """
+        tsv-join -H \
+        --filter-file {input.new_non_first} \
+        --key-fields genbank_accession \
+        --append-fields genbank_accession_rev \
+        --prefix new_ \
+        {input.old_accessions} \
+        > {output}
+        """
+
+
+rule filter_changed:
+    """
+    Filter out accessions/rows that have not changed
+    """
+    input:
+        "results/non_first_accessions.tsv",
+    output:
+        "results/changed_accessions.tsv",
+    shell:
+        """
+        tsv-filter -H \
+        --ff-str-ne new_genbank_accession_rev:genbank_accession_rev \
+        {input} \
+        > {output}
+        """
+
+
+rule get_changed_old_metadata:
+    """
+    Get metadata for changed accessions from old metadata
+    """
+    input:
+        old_meta="data/metadata_old.tsv.zst",
+        changed_accessions="results/changed_accessions.tsv",
+    output:
+        "results/changed_old_metadata.tsv.zst",
+    shell:
+        """
+        zstdcat {input.old_meta} \
+        | tsv-join -H \
+        --filter-file {input.changed_accessions} \
+        --key-fields genbank_accession \
+        | zstd > {output}
+        """
+
+rule append_old_metadata:
+    """
+    Append metadata of old revisions to new metadata
+    """
+    input:
+        old_meta="results/changed_old_metadata.tsv.zst",
+        new_meta="data/metadata_new.tsv.zst",
+    output:
+        "results/multi_revision_metadata.tsv.zst",
+    shell:
+        """
+        zstdcat {input.old_meta} {input.new_meta} \
+        | zstd > {output}
         """
