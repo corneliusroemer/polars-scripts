@@ -1,4 +1,7 @@
 rule download_old_metadata:
+    """
+    From 2023-01-19T01:25:09+00:00
+    """
     output:
         "data/metadata_old.tsv.zst",
     shell:
@@ -8,7 +11,20 @@ rule download_old_metadata:
         --key files/ncov/open/metadata.tsv.zst \
         --version-id AnF_xO4iudTVdiocg0yCFmP6nyvwiVLt \
         2> /dev/null \
-        {output} \
+        {output}
+        """
+
+
+rule download_old_sequences:
+    output:
+        "data/sequences_old.fasta.zst",
+    shell:
+        """
+        aws s3api get-object \
+        --bucket nextstrain-data \
+        --key files/ncov/open/sequences.fasta.zst \
+        --version-id "7p8eLHr52750qwI061ahzg3ykPzyZ.J2" \
+        {output}
         """
 
 
@@ -19,6 +35,21 @@ rule download_new_metadata:
         """
         aws s3 cp s3://nextstrain-data/files/ncov/open/metadata.tsv.zst {output}
         """
+
+
+rule download_new_sequences:
+    output:
+        "data/sequences_new.fasta.zst",
+    shell:
+        """
+        aws s3 cp s3://nextstrain-data/files/ncov/open/sequences.fasta.zst {output}
+        """
+
+
+"""
+Could do it much more simply by just appending and uniq'ing
+Oh well...
+"""
 
 
 rule select_accession_cols:
@@ -102,6 +133,7 @@ rule get_changed_old_metadata:
         | zstd > {output}
         """
 
+
 rule append_old_metadata:
     """
     Append metadata of old revisions to new metadata
@@ -114,5 +146,29 @@ rule append_old_metadata:
     shell:
         """
         zstdcat {input.old_meta} {input.new_meta} \
+        | zstd > {output}
+        """
+
+
+rule replace_seq_id_with_rev:
+    """
+    Replace ids using a mapping file
+    """
+    input:
+        seq="data/sequences_{age}.fasta.zst",
+        mapping="results/accession_cols_{age}.tsv",
+    output:
+        "results/rev_id_sequences_{age}.tsv.zst",
+    shell:
+        """
+        set +o pipefail
+        zstdcat {input.seq} \
+        | seqkit fx2tab \
+        | tsv-join \
+        --filter-file {input.mapping} \
+        --key-fields 1 \
+        --append-fields 3 \
+        | tsv-select -f 4,2 \
+        | seqkit tab2fx -w0 \
         | zstd > {output}
         """
