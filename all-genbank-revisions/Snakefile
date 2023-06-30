@@ -1,3 +1,9 @@
+rule all:
+    input:
+        metadata="results/multi_revision_metadata.tsv.zst",
+        sequences="results/multi_revision_sequences.fasta.zst",
+
+
 rule download_old_metadata:
     """
     From 2023-01-19T01:25:09+00:00
@@ -170,5 +176,52 @@ rule replace_seq_id_with_rev:
         --append-fields 3 \
         | tsv-select -f 4,2 \
         | seqkit tab2fx -w0 \
+        | zstd > {output}
+        """
+
+
+rule old_accessions_to_select:
+    input:
+        "results/changed_accessions.tsv",
+    output:
+        "results/old_to_select.txt",
+    shell:
+        """
+        tsv-select -H \
+        -f genbank_accession_rev \
+        {input} \
+        > {output}
+        """
+
+
+rule select_old_revisions:
+    """
+    From old sequences select those that have changed in new
+    """
+    input:
+        old_seqs="results/rev_id_sequences_old.tsv.zst",
+        filter="results/old_to_select.txt",
+    output:
+        "results/old_revisions.fasta.zst",
+    shell:
+        """
+        zstdcat {input.old_seqs} \
+        | seqkit grep -f {input.filter} -w0 \
+        | zstd > {output}
+        """
+
+
+rule join_fastas:
+    """
+    Join old and new sequences
+    """
+    input:
+        old="results/old_revisions.fasta.zst",
+        new="results/rev_id_sequences_new.tsv.zst",
+    output:
+        "results/multi_revision_sequences.fasta.zst",
+    shell:
+        """
+        zstdcat {input.old} {input.new} \
         | zstd > {output}
         """
