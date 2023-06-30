@@ -1,0 +1,45 @@
+rule download_old_metadata:
+    output:
+        "data/metadata_old.tsv.zst",
+    shell:
+        """
+        aws s3api get-object \
+        --bucket nextstrain-data \
+        --key files/ncov/open/metadata.tsv.zst \
+        --version-id AnF_xO4iudTVdiocg0yCFmP6nyvwiVLt \
+        {output}
+        """
+
+
+rule download_new_metadata:
+    output:
+        "data/metadata_new.tsv.zst",
+    shell:
+        """
+        aws s3 cp s3://nextstrain-data/files/ncov/open/metadata.tsv.zst {output}
+        """
+
+
+rule select_accession_cols:
+    input:
+        "data/metadata_{age}.tsv.zst",
+    output:
+        "results/accession_cols_{age}.tsv",
+    shell:
+        """
+        zstdcat {input} \
+        | tsv-select -H -f strain,genbank_accession,genbank_accession_rev \
+        > {output}
+        """
+
+
+rule non_first_accessions:
+    input:
+        "results/accession_cols_{age}.tsv",
+    output:
+        "results/non_first_accessions_{age}.tsv",
+    shell:
+        """
+        tsv-filter -H --str-in-fld genbank_accession_rev:"." --str-not-in-fld genbank_accession_rev:".1" {input} \
+        > {output}
+        """

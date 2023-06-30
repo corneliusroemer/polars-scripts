@@ -1,0 +1,28 @@
+rule download_metadata:
+    output:
+        "data/metadata.tsv.zst",
+    params:
+        path="s3://nextstrain-ncov-private/metadata.tsv.zst",
+    shell:
+        "aws s3 cp {params.path} {output}"
+
+
+rule subset_metadata:
+    input:
+        "data/metadata.tsv.zst",
+    output:
+        "results/subset.tsv",
+    shell:
+        """
+        zstdcat {input} \
+        | tsv-select -H -f originating_lab,submitting_lab,authors \
+        | tsv-uniq -H \
+        > {output}
+        """
+
+
+rule create_stats:
+    input:
+        "results/subset.tsv",
+    shell:
+        "python scripts/create_stats.py {input}"
