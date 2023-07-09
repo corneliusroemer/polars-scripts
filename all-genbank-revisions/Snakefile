@@ -2,6 +2,7 @@ rule all:
     input:
         metadata="results/multi_revision_metadata.tsv.zst",
         sequences="results/multi_revision_sequences.fasta.zst",
+        nextclade="results/nextclade.tar.zst",
 
 
 rule download_old_metadata:
@@ -49,6 +50,15 @@ rule download_new_sequences:
     shell:
         """
         aws s3 cp s3://nextstrain-data/files/ncov/open/sequences.fasta.zst {output}
+        """
+
+
+rule download_nextclade_dataset:
+    output:
+        "data/nextclade.zip",
+    shell:
+        """
+        nextclade dataset get --name sars-cov-2 --output-zip {output}
         """
 
 
@@ -224,4 +234,31 @@ rule join_fastas:
         """
         zstdcat {input.old} {input.new} \
         | zstd > {output}
+        """
+
+
+rule run_nextclade:
+    input:
+        dataset="data/nextclade.zip",
+        sequences="results/multi_revision_sequences.fasta.zst",
+    output:
+        tsv="results/nextclade/nextclade.tsv",
+    shell:
+        """
+        zstdcat {input.sequences} \
+        | nextclade run \
+        --input-dataset {input.dataset} \
+        --output-all results/nextclade \
+        --output-selection tsv,fasta,translations,insertions \
+        """
+
+
+rule compress_nextclade_results:
+    input:
+        "results/nextclade/nextclade.tsv",
+    output:
+        "results/nextclade.tar.zst",
+    shell:
+        """
+        tar cvf - results/nextclade | zstd > {output}
         """
